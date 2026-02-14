@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Love Mario Mobile Edition</title>
+<style>
+body{margin:0;overflow:hidden;background:pink;}
+canvas{display:block;}
+
+/* Joystick */
+#joystick{
+position:fixed;
+bottom:40px;
+left:40px;
+width:120px;
+height:120px;
+background:rgba(255,255,255,0.2);
+border-radius:50%;
+touch-action:none;
+}
+#stick{
+position:absolute;
+left:35px;
+top:35px;
+width:50px;
+height:50px;
+background:pink;
+border-radius:50%;
+}
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div id="joystick">
+<div id="stick"></div>
+</div>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+
+canvas.width=window.innerWidth;
+canvas.height=window.innerHeight;
+
+window.addEventListener("resize",()=>{
+canvas.width=window.innerWidth;
+canvas.height=window.innerHeight;
+});
+
+/* ================= LOAD IMAGES ================= */
+function load(src){let i=new Image();i.src=src;return i;}
+const bgImg=load("background.avif");
+const playerImg=load("Player.png");
+const birdImg=load("Bird.png");
+const bugImg=load("bug.png");
+
+/* ================= PLAYER ================= */
+const player={
+x:100,y:canvas.height-150,width:60,height:80,
+dx:0,dy:0,
+speed:5,gravity:0.8,jump:-15,
+grounded:false
+};
+
+let worldOffset=0;
+let levelWon=false;
+let fireworks=[];
+let floatingHearts=[];
+let coinCount=0;
+
+const groundY=canvas.height-50;
+
+/* ================= LEVEL ================= */
+const water={x:900,y:groundY,width:400,height:50};
+
+const movingBlocks=[
+{x:950,y:groundY-120,width:120,height:20,dir:1,min:900,max:1200},
+{x:1150,y:groundY-160,width:120,height:20,dir:-1,min:1000,max:1300}
+];
+
+const birds=[
+{x:600,y:200,dx:2},
+{x:1100,y:150,dx:2}
+];
+
+const bugs=[
+{x:800,y:groundY-30,dx:1},
+{x:2000,y:groundY-30,dx:1}
+];
+
+const palace={
+x:2400,
+y:groundY-230,
+size:180,
+beat:0
+};
+
+/* ================= JOYSTICK ================= */
+const joystick=document.getElementById("joystick");
+const stick=document.getElementById("stick");
+let dragging=false;
+
+joystick.addEventListener("touchstart",()=>dragging=true);
+joystick.addEventListener("touchend",()=>{
+dragging=false;
+stick.style.left="35px";
+stick.style.top="35px";
+player.dx=0;
+});
+
+joystick.addEventListener("touchmove",(e)=>{
+if(!dragging)return;
+const rect=joystick.getBoundingClientRect();
+const x=e.touches[0].clientX-rect.left-60;
+stick.style.left=(x+35)+"px";
+player.dx=x/20;
+});
+
+/* ================= SWIPE TO JUMP ================= */
+let startY=0;
+canvas.addEventListener("touchstart",(e)=>{
+startY=e.touches[0].clientY;
+});
+
+canvas.addEventListener("touchend",(e)=>{
+let endY=e.changedTouches[0].clientY;
+if(startY-endY>50 && player.grounded){
+player.dy=player.jump;
+player.grounded=false;
+}
+});
+
+/* ================= FIREWORKS ================= */
+function spawnFirework(){
+fireworks.push({
+x:Math.random()*canvas.width,
+y:Math.random()*canvas.height/2,
+dx:(Math.random()-0.5)*6,
+dy:(Math.random()-0.5)*6,
+life:100
+});
+}
+
+function updateFireworks(){
+fireworks.forEach(f=>{
+f.x+=f.dx;
+f.y+=f.dy;
+f.dy+=0.05;
+f.life--;
+});
+fireworks=fireworks.filter(f=>f.life>0);
+}
+
+/* ================= FLOATING HEARTS ================= */
+function spawnFloatingHeart(){
+floatingHearts.push({
+x:Math.random()*canvas.width,
+y:canvas.height,
+size:10+Math.random()*15,
+speed:1+Math.random(),
+alpha:1
+});
+}
+
+function updateFloatingHearts(){
+floatingHearts.forEach(h=>{
+h.y-=h.speed;
+h.alpha-=0.005;
+});
+floatingHearts=floatingHearts.filter(h=>h.alpha>0);
+}
+
+/* ================= UPDATE ================= */
+function update(){
+
+if(!levelWon){
+
+player.dy+=player.gravity;
+player.x+=player.dx;
+player.y+=player.dy;
+player.grounded=false;
+
+if(player.x>400)worldOffset=player.x-400;
+
+/* Ground */
+if(player.y+player.height>groundY){
+player.y=groundY-player.height;
+player.dy=0;
+player.grounded=true;
+}
+
+/* Moving blocks */
+movingBlocks.forEach(b=>{
+b.x+=b.dir*2;
+if(b.x>b.max||b.x<b.min)b.dir*=-1;
+if(player.x<b.x+b.width &&
+player.x+player.width>b.x &&
+player.y+player.height>b.y &&
+player.y<b.y &&
+player.dy>0){
+player.y=b.y-player.height;
+player.dy=0;
+player.grounded=true;
+}
+});
+
+/* Water death */
+if(player.x+player.width>water.x &&
+player.x<water.x+water.width &&
+player.y+player.height>=water.y){
+player.x=100;
+player.y=groundY-100;
+worldOffset=0;
+}
+
+/* Palace */
+palace.beat+=0.08;
+if(player.x>palace.x){
+levelWon=true;
+}
+}
+
+/* Birds */
+birds.forEach(b=>{
+b.x+=b.dx;
+if(b.x<400||b.x>2600)b.dx*=-1;
+});
+
+/* Bugs */
+bugs.forEach(b=>{
+b.x+=b.dx;
+if(b.x<400||b.x>2600)b.dx*=-1;
+});
+
+if(levelWon){
+if(Math.random()<0.1)spawnFirework();
+if(Math.random()<0.2)spawnFloatingHeart();
+}
+
+updateFireworks();
+updateFloatingHearts();
+}
+
+/* ================= DRAW ================= */
+function draw(){
+ctx.clearRect(0,0,canvas.width,canvas.height);
+
+if(bgImg.complete){
+ctx.drawImage(bgImg,0,0,canvas.width,canvas.height);
+}
+
+ctx.save();
+ctx.translate(-worldOffset,0);
+
+/* Ground */
+ctx.fillStyle="#8B4513";
+ctx.fillRect(0,groundY,6000,50);
+
+/* Water */
+ctx.fillStyle="#00BFFF";
+ctx.fillRect(water.x,water.y,water.width,water.height);
+
+/* Moving blocks */
+ctx.fillStyle="purple";
+movingBlocks.forEach(b=>ctx.fillRect(b.x,b.y,b.width,b.height));
+
+/* Birds */
+birds.forEach(b=>ctx.drawImage(birdImg,b.x,b.y,50,40));
+
+/* Bugs */
+bugs.forEach(b=>ctx.drawImage(bugImg,b.x,b.y,40,40));
+
+/* Palace */
+let size=palace.size+Math.sin(palace.beat)*10;
+ctx.fillStyle="hotpink";
+ctx.beginPath();
+ctx.moveTo(palace.x+size/2,palace.y+size);
+ctx.bezierCurveTo(palace.x+size*1.2,palace.y+size*0.6,
+palace.x+size*0.8,palace.y,
+palace.x+size/2,palace.y+size*0.3);
+ctx.bezierCurveTo(palace.x+size*0.2,palace.y,
+palace.x-size*0.2,palace.y+size*0.6,
+palace.x+size/2,palace.y+size);
+ctx.fill();
+
+/* Player */
+ctx.drawImage(playerImg,player.x,player.y,player.width,player.height);
+
+ctx.restore();
+
+/* Fireworks */
+fireworks.forEach(f=>{
+ctx.fillStyle="white";
+ctx.fillRect(f.x,f.y,3,3);
+});
+
+/* Floating hearts */
+floatingHearts.forEach(h=>{
+ctx.globalAlpha=h.alpha;
+ctx.fillStyle="pink";
+ctx.beginPath();
+ctx.arc(h.x,h.y,h.size,0,Math.PI*2);
+ctx.fill();
+ctx.globalAlpha=1;
+});
+
+/* I LOVE YOU */
+if(levelWon){
+ctx.fillStyle="white";
+ctx.font="60px cursive";
+ctx.fillText("I LOVE YOU 💖",canvas.width/2-200,120);
+}
+
+requestAnimationFrame(loop);
+}
+
+function loop(){
+update();
+draw();
+}
+loop();
+</script>
+</body>
+</html>
